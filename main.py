@@ -95,9 +95,9 @@ def health_check():
     return "Amazon Bot is running ok."
 
 if __name__ == "__main__":
-    # スクレイピング処理をバックグラウンドスレッドで実行
+    # 監視タスクをバックグラウンドで開始
     threading.Thread(target=check_amazon_task, daemon=True).start()
     
-    # Webサーバーを起動
+    # Flaskサーバー起動
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
