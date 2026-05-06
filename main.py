@@ -58,11 +58,9 @@ def check_amazon_task():
         while True:
             for item in target_items:
                 try:
-                    page.goto(item['url'], timeout=15000)
-                    
-                    # Buybox要素を待機
+                    page.goto(item['url'], timeout=30000)
                     buybox = page.locator("#buybox")
-                    buybox.wait_for(state="attached", timeout=5000)
+                    buybox.wait_for(state="attached", timeout=10000)
                     
                     text_content = buybox.inner_text()
                     is_official = "Amazon.co.jp" in text_content
@@ -73,7 +71,7 @@ def check_amazon_task():
                         
                         if is_official and price <= price_limit:
                             print(f"{item['name']}: 公式在庫あり {price}円")
-                            msg = f"**(test)【Amazon公式 在庫確認】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
+                            msg = f"**【Amazon公式 在庫確認】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
                             send_discord_notify(msg)
                         else:
                             print(f"-> {item['name']}: マケプレ ({price}円) または条件外")
@@ -81,14 +79,12 @@ def check_amazon_task():
                         print(f"-> {item['name']}: 在庫なし/価格取得不可")
 
                 except Exception as e:
-                    print(f"-> {item['name']}: 読み込みエラーまたはタイムアウト")
+                    print(f"-> {item['name']}: エラー詳細: {type(e).__name__} - {e}")
                 
-                # アイテム間の遷移は少し間隔を空ける（Amazonのブロック対策）
                 time.sleep(2)
             
             print("1サイクル完了。20秒待機...")
             time.sleep(20)
-
 # Renderのポートバインディング対策（死活監視用エンドポイント）
 @app.route("/")
 def health_check():
