@@ -1,5 +1,5 @@
 # Playwright公式のPython環境を使用（ブラウザインストール済み）
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.59.0-jammy
 
 # 作業ディレクトリの設定
 WORKDIR /app
