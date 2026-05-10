@@ -8,9 +8,30 @@ from flask import Flask
 
 app = Flask(__name__)
 
+# --- 設定項目 ---
 target_items = [
-    {"name": "ロレッタ", "asin": "B004WBF8EG", "url": "https://www.amazon.co.jp/dp/B004WBF8EG"},
-    {"name": "PlayStation 5", "asin": "B08SGeDlu", "url": "https://www.amazon.co.jp/dp/B08SGeDlu"},
+    {"name": "ぴだんぶい", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%82%B5%E3%83%B3%E3%83%AA%E3%82%AA%E3%82%AD%E3%83%A3%E3%83%A9%E3%82%AF%E3%82%BF%E3%83%BC%E3%82%BA-S8815135/dp/B0G2RP9RMN?ref_=ast_sto_dp"},
+    {"name": "みみっち", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8812578/dp/B0F4CZNHWC?ref_=ast_sto_dp"},
+    {"name": "まめっち", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8812543/dp/B0F4CWWMTM?ref_=ast_sto_dp"},
+    # {"name": "スヌーピー", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8815143/dp/B0G2RSZ4KX?ref_=ast_sto_dp"},
+    {"name": "キティ(pink)", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%82%B5%E3%83%B3%E3%83%AA%E3%82%AA%E3%82%AD%E3%83%A3%E3%83%A9%E3%82%AF%E3%82%BF%E3%83%BC%E3%82%BA-S8815070/dp/B0G2RQL3RG?ref_=ast_sto_dp"},
+    {"name": "キティ(red)", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%82%B5%E3%83%B3%E3%83%AA%E3%82%AA%E3%82%AD%E3%83%A3%E3%83%A9%E3%82%AF%E3%82%BF%E3%83%BC%E3%82%BA-S8815062/dp/B0G2RSS3HV?ref_=ast_sto_dp"},
+    # {"name": "マイメロ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%82%B5%E3%83%B3%E3%83%AA%E3%82%AA%E3%82%AD%E3%83%A3%E3%83%A9%E3%82%AF%E3%82%BF%E3%83%BC%E3%82%BA-S8815089/dp/B0G2RQ7QBP?ref_=ast_sto_dp"},
+    # {"name": "めめっち", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-%E3%81%9F%E3%81%BE%E3%81%94%E3%81%A3%E3%81%A1-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-%E3%82%81%E3%82%81%E3%81%A3%E3%81%A1-S8812551/dp/B0F4D3KKGJ?ref_=ast_sto_dp"},
+    {"name": "クロミ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%82%B5%E3%83%B3%E3%83%AA%E3%82%AA%E3%82%AD%E3%83%A3%E3%83%A9%E3%82%AF%E3%82%BF%E3%83%BC%E3%82%BA-S8815127/dp/B0G2RPXXY8?ref_=ast_sto_dp"},
+    # {"name": "ミニ エイリアン", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8815054/dp/B0G2RPNBLX?ref_=ast_sto_dp"},
+    # {"name": "ちいかわ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542899/dp/B0FN3YRZNY?ref_=ast_sto_dp"},
+    # {"name": "ハチワレ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542902/dp/B0FN41LJVC?ref_=ast_sto_dp"},
+    # {"name": "うさぎ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542910/dp/B0FN42WHFR?ref_=ast_sto_dp"},
+    # {"name": "ちいハチうさ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%81%A1%E3%81%84%E3%81%8B%E3%82%8F%C3%97%E3%83%8F%E3%83%81%E3%83%AF%E3%83%AC%C3%97%E3%81%86%E3%81%95%E3%81%8E-S8542945/dp/B0FN42TGW4?ref_=ast_sto_dp"},
+    # {"name": "モモンガ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542929/dp/B0FN3ZW94L?ref_=ast_sto_dp"},
+    # {"name": "古本屋", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542929/dp/B0FN3ZW94L?ref_=ast_sto_dp"},
+    # {"name": "ちいかわニコニコ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542953/dp/B0FN412KVB?ref_=ast_sto_dp"},
+    # {"name": "ちいかわポーズ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542961/dp/B0FN42SFNB?ref_=ast_sto_dp"},
+    # {"name": "くちぱっち", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-%E3%81%9F%E3%81%BE%E3%81%94%E3%81%A3%E3%81%A1-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-%E3%81%8F%E3%81%A1%E3%81%B1%E3%81%A3%E3%81%A1-S8812560/dp/B0F4CZTGD9?ref_=ast_sto_dp"},
+    # {"name": "Nintendo Switch 2", "url": "https://amzn.asia/d/02LmnGzL"},
+    # {"name": "PlayStation 5", "url": "https://amzn.asia/d/08SGeDlu"},
+    # {"name": "", "url": ""},
 ]
 
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
@@ -21,16 +42,10 @@ def send_discord_notify(message):
         requests.post(discord_webhook_url, json={"content": message}, timeout=10)
     except: pass
 
-def force_set_japan_location(page):
-    """
-    Amazonの内部API(address-change)を直接叩いて、
-    セッションのお届け先を100-0001(日本)に固定する
-    """
+def set_location_to_japan(page):
+    """お届け先を日本に強制設定"""
     try:
-        print("--- お届け先API強制書き換え実行 ---")
-        page.goto("https://www.amazon.co.jp/", wait_until="domcontentloaded")
-        
-        # Amazonの内部APIに直接POSTリクエストを投げてお届け先を1000001に設定
+        page.goto("https://www.amazon.co.jp/", wait_until="domcontentloaded", timeout=60000)
         page.evaluate("""
             fetch('https://www.amazon.co.jp/gp/delivery/ajax/address-change.html', {
                 method: 'POST',
@@ -38,79 +53,64 @@ def force_set_japan_location(page):
                 body: 'locationType=LOCATION_INPUT&zipCode=1000001&storeContext=generic&deviceType=web&pageType=Gateway&actionSource=glow'
             })
         """)
-        page.wait_for_timeout(2000)
-        print("APIリクエスト完了")
-    except Exception as e:
-        print(f"APIリクエスト失敗: {e}")
+        time.sleep(2)
+        return True
+    except:
+        return False
 
-def check_amazon_task():
+def check_task():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
             locale="ja-JP"
         )
         page = context.new_page()
+        set_location_to_japan(page)
 
-        # 起動時に一度だけお届け先を強制固定
-        force_set_japan_location(page)
-
-        print("監視プロセス開始（API強制書き換えモード）")
         while True:
             for item in target_items:
                 try:
-                    # Amazon公式在庫(smid)を指定してページへ
-                    page.goto(f"{item['url']}?smid=AN1VRQENFRJN5", wait_until="domcontentloaded", timeout=60000)
-                    page.wait_for_timeout(5000)
+                    # 公式販売指定とキャッシュ回避
+                    page.goto(f"{item['url']}?smid=AN1VRQENFRJN5&_t={int(time.time())}", wait_until="domcontentloaded", timeout=60000)
+                    time.sleep(3)
 
                     content = page.content()
                     
-                    # 1. ページ取得チェック
-                    if "CAPTCHA" in page.title() or len(content) < 5000:
-                        print(f"-> {item['name']}: [ブロック] ページが正常に読み込めません")
+                    # ブロック時は位置再設定
+                    if "CAPTCHA" in page.title() or len(content) < 10000:
+                        print(f"-> {item['name']}: Blocked. Retrying location...")
+                        set_location_to_japan(page)
                         continue
 
-                    # 2. 価格抽出（より泥臭い方法で）
-                    # ￥マークの後に続く数字をページ全体から探す
+                    # 価格・在庫判定
                     price = None
                     price_matches = re.findall(r'￥\s?([0-9,]{3,})', content)
                     if price_matches:
-                        # ページ内で最初に見つかった3桁以上の数字を価格とする
                         price = int(re.sub(r'\D', '', price_matches[0]))
 
-                    # 3. 在庫/カート判定
-                    # カートボタン、または「Amazon.co.jpが販売」の文字列があるか
                     has_cart = "add-to-cart-button" in content or "buy-now-button" in content
                     is_official = "Amazon.co.jp" in content
 
-                    # 4. 判定と出力
                     if has_cart and is_official:
-                        display_price = f"{price}円" if price else "価格不明"
-                        print(f"{item['name']}: [成功] 公式在庫あり ({display_price})")
-                        send_discord_notify(f"**【Amazon在庫復活】**\n{item['name']}\n価格: `{display_price}`\n{item['url']}")
+                        p_str = f"{price}円" if price else "価格不明"
+                        print(f"★ {item['name']}: 在庫あり ({p_str})")
+                        send_discord_notify(f"**【Amazon在庫復活】**\n{item['name']}\n価格: `{p_str}`\n{item['url']}")
                     else:
-                        # 診断情報の出力
-                        status = "在庫なし"
-                        if "発送できません" in content:
-                            status = "地域制限により閲覧不可"
-                        elif "在庫切れ" in content:
-                            status = "純粋な在庫切れ"
-                        print(f"-> {item['name']}: {status} (取得価格: {price})")
+                        print(f"-> {item['name']}: 在庫なし (Price: {price})")
 
                 except Exception as e:
-                    # 'Error' 以外の詳細な情報を出すために str(e) を使用
-                    print(f"-> {item['name']}: エラー - {str(e)[:50]}")
+                    print(f"-> {item['name']}: Error - {str(e)[:30]}")
                 
-                time.sleep(15)
+                time.sleep(2) # 商品間隔
             
-            print("1サイクル完了。次へ...")
-            time.sleep(30)
+            print(f"--- Cycle Finished {time.strftime('%H:%M:%S')} ---")
+            time.sleep(15) # ループ待機時間
 
 @app.route("/")
-def health_check():
-    return "Running"
+def health():
+    return "OK"
 
 if __name__ == "__main__":
-    threading.Thread(target=check_amazon_task, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    threading.Thread(target=check_task, daemon=True).start()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
