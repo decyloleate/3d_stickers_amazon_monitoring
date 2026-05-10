@@ -38,7 +38,7 @@ def check_amazon_task():
         )
         page = context.new_page()
         
-        # 画像・メディアのみブロック
+        # 画像類をブロックして高速化
         page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "media", "font"] else route.continue_())
 
         print("監視プロセス開始")
@@ -48,48 +48,35 @@ def check_amazon_task():
                     page.goto(item['url'], wait_until="domcontentloaded", timeout=40000)
                     page.wait_for_timeout(5000)
 
-                    # 1. カートボックスまたは価格エリアの特定
-                    buybox = None
-                    for selector in ["#buybox", "#lp_buybox", "#desktop_buybox", "#corePrice_feature_div", "#price_inside_buybox"]:
-                        if page.locator(selector).is_visible():
-                            buybox = page.locator(selector)
-                            break
+                    # 1. 価格エリアの特定（より厳密なセレクタに変更）
+                    # .a-price-whole は「￥66,000」の「66,000」部分だけを指すクラスです
+                    price_element = page.locator(".a-container .a-price-whole").first
                     
-                    if buybox:
-                        full_text = buybox.inner_text()
-                        is_official = any(x in full_text for x in ["Amazon.co.jp", "Amazonによる発送", "Amazon.co.jpが販売"])
-                        
-                        # 2. 価格抽出の強化
-                        price = None
-                        # まずは一般的な価格クラスから探す
-                        price_selectors = [".a-price-whole", ".a-offscreen", "span[data-a-color='price']", ".a-color-price"]
-                        for p_sel in price_selectors:
-                            el = buybox.locator(p_sel).first
-                            if el.count() > 0:
-                                digits = re.sub(r'\D', '', el.inner_text())
-                                if digits:
-                                    price = int(digits)
-                                    break
-                        
-                        # それでも取れない場合、buybox全体のテキストから「￥数字」のパターンを探す
-                        if not price:
-                            # ￥または¥の後の数字を抽出（例：￥66,980 -> 66980）
-                            match = re.search(r'[￥¥]\s?([\d,]+)', full_text)
-                            if match:
-                                price = int(re.sub(r'\D', '', match.group(1)))
+                    price = None
+                    if price_element.is_visible():
+                        raw_text = price_element.inner_text()
+                        # 数字以外を削除し、最初に見つかった数値の塊だけを取得
+                        digits = re.sub(r'\D', '', raw_text)
+                        if digits:
+                            price = int(digits)
 
-                        # 3. 判定と通知
-                        if price and is_official and price <= price_limit:
-                            print(f"{item['name']}: 在庫あり判定 ({price}円)")
-                            msg = f"**【Amazon在庫あり】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
-                            send_discord_notify(msg)
-                        elif price:
-                            status = "Amazon以外" if not is_official else "価格条件外"
-                            print(f"-> {item['name']}: {status} ({price}円)")
-                        else:
-                            print(f"-> {item['name']}: ボタンはありますが価格が特定できません。")
+                    # 2. 販売元の特定（カートボックス内のテキストで判定）
+                    buybox = page.locator("#buybox, #desktop_buybox").first
+                    is_official = False
+                    if buybox.is_visible():
+                        bb_text = buybox.inner_text()
+                        is_official = any(x in bb_text for x in ["Amazon.co.jp", "Amazonによる発送", "Amazon.co.jpが販売"])
+
+                    # 3. 判定と通知
+                    if price and is_official and price <= price_limit:
+                        print(f"{item['name']}: 在庫あり判定 ({price}円)")
+                        msg = f"**【Amazon在庫あり】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
+                        send_discord_notify(msg)
+                    elif price:
+                        status = "Amazon以外（公式在庫なし）" if not is_official else "価格条件外"
+                        print(f"-> {item['name']}: {status} ({price}円)")
                     else:
-                        print(f"-> {item['name']}: 在庫なし")
+                        print(f"-> {item['name']}: 在庫なし（価格が読み取れません）")
 
                 except Exception as e:
                     print(f"-> {item['name']}: エラー - {type(e).__name__}")
