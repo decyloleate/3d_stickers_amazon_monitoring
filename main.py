@@ -33,7 +33,7 @@ target_items = [
     # {"name": "", "url": ""},
 ]
 
-price_limit = 600
+price_limit = 700
 # セキュリティのため環境変数から取得するように変更
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
