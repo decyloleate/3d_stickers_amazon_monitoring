@@ -43,7 +43,7 @@ def send_discord_notify(message):
     except: pass
 
 def set_location_to_japan(page):
-    """お届け先を日本に強制設定"""
+    """お届け先を日本に強制設定（US-IP対策）"""
     try:
         page.goto("https://www.amazon.co.jp/", wait_until="domcontentloaded", timeout=60000)
         page.evaluate("""
@@ -71,7 +71,7 @@ def check_task():
         while True:
             for item in target_items:
                 try:
-                    # 公式販売指定とキャッシュ回避
+                    # 公式販売者ID(AN1VRQENFRJN5)を固定し、マーケットプレイス品を排除
                     page.goto(f"{item['url']}?smid=AN1VRQENFRJN5&_t={int(time.time())}", wait_until="domcontentloaded", timeout=60000)
                     time.sleep(3)
 
@@ -83,29 +83,32 @@ def check_task():
                         set_location_to_japan(page)
                         continue
 
-                    # 価格・在庫判定
+                    # 公式販売判定（Amazon.co.jpが販売/発送する在庫のみを許可）
+                    is_official = any(x in content for x in ["Amazon.co.jpが販売", "発送元 Amazon.co.jp"])
+                    has_cart = "add-to-cart-button" in content or "buy-now-button" in content
+
+                    # 価格抽出
                     price = None
                     price_matches = re.findall(r'￥\s?([0-9,]{3,})', content)
                     if price_matches:
                         price = int(re.sub(r'\D', '', price_matches[0]))
 
-                    has_cart = "add-to-cart-button" in content or "buy-now-button" in content
-                    is_official = "Amazon.co.jp" in content
-
+                    # 【重要】公式かつカートボタンがある場合のみ通知
                     if has_cart and is_official:
                         p_str = f"{price}円" if price else "価格不明"
-                        print(f"★ {item['name']}: 在庫あり ({p_str})")
-                        send_discord_notify(f"**【Amazon在庫復活】**\n{item['name']}\n価格: `{p_str}`\n{item['url']}")
+                        print(f"★ {item['name']}: 公式在庫あり ({p_str})")
+                        # 通知内容も公式限定であることを明記
+                        send_discord_notify(f"**【Amazon公式サイト在庫復活】**\n{item['name']}\n価格: `{p_str}`\n{item['url']}?smid=AN1VRQENFRJN5")
                     else:
-                        print(f"-> {item['name']}: 在庫なし (Price: {price})")
+                        print(f"-> {item['name']}: 公式在庫なし (Marketplace ignored)")
 
                 except Exception as e:
                     print(f"-> {item['name']}: Error - {str(e)[:30]}")
                 
-                time.sleep(2) # 商品間隔
+                time.sleep(2)
             
             print(f"--- Cycle Finished {time.strftime('%H:%M:%S')} ---")
-            time.sleep(15) # ループ待機時間
+            time.sleep(15) # ループ待機時間15秒
 
 @app.route("/")
 def health():
