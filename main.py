@@ -2,6 +2,7 @@ import time
 import os
 import requests
 import threading
+import re
 from playwright.sync_api import sync_playwright
 from flask import Flask
 
@@ -13,23 +14,20 @@ target_items = [
 ]
 
 price_limit = 99999999999
-# 環境変数の読み込み
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 def send_discord_notify(message):
     if not discord_webhook_url:
-        print("【警告】DISCORD_WEBHOOK_URL が設定されていません。")
+        print("【警告】Webhook URLが設定されていません。")
         return
     try:
-        # デバッグ用：送信を試みていることをログに出す
-        print(f"Discord通知送信中...")
         response = requests.post(discord_webhook_url, json={"content": message}, timeout=10)
         if response.status_code == 204:
-            print("Discord通知の送信に成功しました。")
+            print("Discord通知を送信しました。")
         else:
-            print(f"【エラー】Discord送信失敗（ステータスコード: {response.status_code}）")
+            print(f"Discord送信失敗: {response.status_code}")
     except Exception as e:
-        print(f"【エラー】Discord送信中に例外が発生しました: {e}")
+        print(f"Discord送信エラー: {e}")
 
 def check_amazon_task():
     with sync_playwright() as p:
@@ -40,7 +38,7 @@ def check_amazon_task():
         )
         page = context.new_page()
         
-        # 安定性を重視し、CSSは読み込ませる（画像・メディアのみブロック）
+        # 画像・メディアをブロック（CSSはレイアウト維持のため読み込む）
         page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "media", "font"] else route.continue_())
 
         print("監視プロセス開始")
@@ -48,44 +46,46 @@ def check_amazon_task():
             for item in target_items:
                 try:
                     page.goto(item['url'], wait_until="domcontentloaded", timeout=40000)
-                    page.wait_for_timeout(5000) # 待機時間を5秒に延長
+                    page.wait_for_timeout(5000) # レンダリング待ち
 
-                    # 複数のカートボックスIDをチェック
                     buybox = None
-                    for selector in ["#buybox", "#lp_buybox", "#desktop_buybox", "#combinedBuyBox"]:
+                    for selector in ["#buybox", "#lp_buybox", "#desktop_buybox", "#combinedBuyBox", "#corePrice_feature_div"]:
                         if page.locator(selector).is_visible():
                             buybox = page.locator(selector)
                             break
                     
                     if buybox:
-                        text_content = buybox.inner_text()
-                        is_official = "Amazon.co.jp" in text_content
+                        full_text = buybox.inner_text()
+                        # 公式販売チェック（柔軟に判定）
+                        is_official = any(x in full_text for x in ["Amazon.co.jp", "Amazonによる発送", "Amazon.co.jpが販売"])
                         
-                        # 価格取得セレクタを強化（a-offscreenなども含める）
-                        price_selectors = [".a-price-whole", ".a-offscreen", "#priceblock_ourprice", "#kindle-price"]
+                        # 価格抽出（正規表現で数字だけを抜き出す）
                         price = None
+                        price_selectors = [".a-price-whole", ".a-offscreen", "#priceblock_ourprice", "span.a-color-price"]
                         for p_sel in price_selectors:
-                            el = buybox.locator(p_sel).first
+                            el = page.locator(p_sel).first
                             if el.count() > 0:
-                                p_text = el.inner_text().replace("￥", "").replace(",", "").strip()
-                                if p_text.isdigit():
-                                    price = int(p_text)
+                                raw_price_text = el.inner_text()
+                                digits = re.sub(r'\D', '', raw_price_text) # 数字以外をすべて削除
+                                if digits:
+                                    price = int(digits)
                                     break
 
                         if price and is_official and price <= price_limit:
-                            print(f"{item['name']}: 公式在庫あり {price}円")
-                            msg = f"**【Amazon公式 在庫確認】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
+                            print(f"{item['name']}: 在庫あり判定！({price}円)")
+                            msg = f"**【Amazon在庫あり】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
                             send_discord_notify(msg)
                         elif price:
-                            reason = "Amazon以外" if not is_official else "価格条件外"
-                            print(f"-> {item['name']}: {reason} ({price}円)")
+                            status = "Amazon以外" if not is_official else "価格条件外"
+                            print(f"-> {item['name']}: {status} ({price}円)")
                         else:
-                            print(f"-> {item['name']}: 在庫ありそうですが、価格の数値が読み取れませんでした。")
+                            # 価格が取れないがボタンはある場合、テスト通知を送ってみる（任意）
+                            print(f"-> {item['name']}: ボタンはありますが価格が不明です。")
                     else:
-                        print(f"-> {item['name']}: カートボタンが見つかりません（在庫なし）")
+                        print(f"-> {item['name']}: 在庫なし")
 
                 except Exception as e:
-                    print(f"-> {item['name']}: エラー発生 - {type(e).__name__}")
+                    print(f"-> {item['name']}: エラー - {type(e).__name__}")
                 
                 time.sleep(5)
             
@@ -94,7 +94,7 @@ def check_amazon_task():
 
 @app.route("/")
 def health_check():
-    return "Amazon Bot is running ok."
+    return "Running"
 
 if __name__ == "__main__":
     threading.Thread(target=check_amazon_task, daemon=True).start()
