@@ -9,8 +9,10 @@ from flask import Flask
 app = Flask(__name__)
 
 # --- 設定項目 ---
+# URLに ?language=ja_JP を付けて日本語・日本向けを強調
 target_items = [
-    {"name": "ロレッタ", "url": "https://amzn.asia/d/04Hjs6ii"},
+    {"name": "ロレッタ", "url": "https://www.amazon.co.jp/dp/B004WBF8EG?language=ja_JP"},
+    {"name": "PlayStation 5", "url": "https://www.amazon.co.jp/dp/B08SGeDlu?language=ja_JP"},
 ]
 
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
@@ -19,117 +21,96 @@ def send_discord_notify(message):
     if not discord_webhook_url: return
     try:
         requests.post(discord_webhook_url, json={"content": message}, timeout=10)
-    except Exception as e:
-        print(f"Discord送信エラー: {e}")
+    except: pass
 
-def set_japan_location(page):
-    """お届け先を日本の郵便番号(100-0001)に設定する（強化版）"""
-    try:
-        print("お届け先を日本(100-0001)に設定中...")
-        page.goto("https://www.amazon.co.jp/", wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(3000)
-
-        # 1. 邪魔なログインポップアップやバナーを消去
-        # 画面の適当な場所をクリックしてポップアップを消す
-        page.mouse.click(10, 10)
-        page.wait_for_timeout(1000)
-
-        # 2. お届け先ボタンをクリック（複数の候補から探す）
-        location_btn = page.locator("#nav-global-location-slot, #glow-ingress-block, a[data-nav-role='select-location']").first
-        if location_btn.is_visible():
-            location_btn.click()
-        else:
-            print("お届け先ボタンが見つかりません。")
-            return
-
-        # 3. 郵便番号入力フォームを待機（タイムアウトを伸ばし、複数のセレクタを試行）
-        # アメリカからのアクセス時はIDが変わることがあるため汎用的なセレクタを使用
-        input_selector = "input#GLUXZipUpdateInput, input[aria-label='郵便番号の最初の3桁'], input.GLUX_Full_Width"
-        try:
-            page.wait_for_selector(input_selector, timeout=15000)
-        except:
-            print("入力フォームが出現しません。ページ全体のHTMLをログに出力します（解析用）")
-            # 失敗した場合、今の画面の状態を確認するために少し待ってからHTML構造を把握
-            return
-
-        # 4. 郵便番号入力 (1000001)
-        page.fill(input_selector, "1000001")
-        
-        # 5. 「設定」または「適用」ボタンをクリック
-        apply_btn = page.locator("#GLUXZipUpdate, input[aria-labelledby='GLUXZipUpdate-announce']").first
-        apply_btn.click()
-        
-        # 6. 反映後の「完了」や「続行」ボタンを処理
-        page.wait_for_timeout(3000)
-        # 「続行」ボタンなどが出る場合がある
-        final_btns = ["#GLUXConfirmClose", ".a-popover-footer input", "button[name='glowDoneButton']"]
-        for btn in final_btns:
-            el = page.locator(btn).first
-            if el.is_visible():
-                el.click()
-                break
-
-        page.wait_for_timeout(2000)
-        print("位置設定完了")
-        
-    except Exception as e:
-        print(f"位置設定中に致命的なエラー: {e}")
+def inject_session_cookies(context):
+    """
+    画面操作なしで「日本のお届け先」を強制セットするCookieを注入する
+    """
+    # 郵便番号100-0001に関連する情報をCookieとして設定
+    cookies = [
+        {
+            "name": "i18n-prefs",
+            "value": "JPY",
+            "domain": ".amazon.co.jp",
+            "path": "/"
+        },
+        {
+            "name": "lc-acjp",
+            "value": "ja_JP",
+            "domain": ".amazon.co.jp",
+            "path": "/"
+        }
+    ]
+    context.add_cookies(cookies)
 
 def check_amazon_task():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        # 日本語環境を徹底
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             locale="ja-JP",
-            viewport={'width': 1280, 'height': 800} # 画面サイズを固定してレイアウト崩れを防ぐ
+            timezone_id="Asia/Tokyo",
+            viewport={'width': 1280, 'height': 800}
         )
-        page = context.new_page()
         
-        # 起動時に日本国内に設定を試みる
-        set_japan_location(page)
+        # Cookieを注入して住所変更の手間を省く
+        inject_session_cookies(context)
+        page = context.new_page()
 
-        print("監視プロセス開始")
+        print("監視プロセス開始（Cookie注入モード）")
         while True:
             for item in target_items:
                 try:
-                    # 遷移を安定させるため、wait_untilをnetworkidleに変更
-                    page.goto(item['url'], wait_until="networkidle", timeout=60000)
+                    # networkidleだと時間がかかる場合があるのでdomcontentloadedで判定
+                    page.goto(item['url'], wait_until="domcontentloaded", timeout=60000)
                     page.wait_for_timeout(5000)
 
-                    # --- 価格取得 ---
+                    # --- 米国IP対策: 「すべての出品を見る」ボタンがあるかチェック ---
+                    # カートボタンがなくても「すべての出品」から価格が拾える場合がある
+                    all_offers_btn = page.locator("a[aria-label='すべての出品を見る']").first
+                    if all_offers_btn.is_visible() and not page.locator(".a-price-whole").first.is_visible():
+                         all_offers_btn.click()
+                         page.wait_for_timeout(3000)
+
+                    # --- 価格取得ロジックの再強化 ---
                     price = None
-                    # 米国IPから見た時の特殊な価格エリアも考慮
-                    price_selectors = [
-                        "#corePrice_desktop .a-price-whole",
+                    # 1. メイン価格エリア 2. 定期おトク便 3. 右側の価格一覧
+                    selectors = [
                         "#corePriceDisplay_desktop_feature_div .a-price-whole",
-                        "#sns-base-price .a-price-whole",
+                        "#corePrice_desktop .a-price-whole",
+                        ".a-price.a-text-price.a-size-medium .a-offscreen", # セール時
                         "#kindle-price",
                         ".a-color-price"
                     ]
                     
-                    for sel in price_selectors:
+                    for sel in selectors:
                         el = page.locator(sel).first
                         if el.is_visible():
-                            text = el.inner_text()
-                            digits = re.sub(r'\D', '', text)
-                            if digits and int(digits) > 100: # 100円以下は誤検知として無視
-                                price = int(digits)
-                                break
+                            raw = el.inner_text()
+                            # ￥1,980 (￥7/g) のような表記から最初の数字の塊を抜く
+                            match = re.search(r'([0-9,]{3,})', raw)
+                            if match:
+                                val = int(re.sub(r'\D', '', match.group(1)))
+                                if val > 100:
+                                    price = val
+                                    break
 
-                    # --- 販売元チェック ---
-                    # ログの「Amazon以外」という判定が正しいか検証するため、テキスト判定を緩和
+                    # --- 販売元判定 ---
                     is_official = False
-                    buybox = page.locator("#buybox, #desktop_buybox, #rightCol").first
-                    if buybox.is_visible():
-                        bb_text = buybox.inner_text()
-                        is_official = any(x in bb_text for x in ["Amazon.co.jp", "Amazonによる発送", "Amazon.co.jpが販売", "Amazon.co.jp directly"])
+                    # ページ全体のテキストからAmazonが販売している形跡を探す
+                    body_text = page.locator("body").inner_text()
+                    official_keywords = ["Amazon.co.jpが販売", "発送元 Amazon.co.jp", "Amazonによる発送"]
+                    is_official = any(k in body_text for k in official_keywords)
 
-                    # --- 判定結果 ---
+                    # --- 判定 ---
                     if price:
                         if is_official:
                             print(f"{item['name']}: 在庫あり判定 ({price}円)")
                             send_discord_notify(f"**【Amazon在庫あり】**\n{item['name']}\n価格: `{price}円`\n{item['url']}")
                         else:
+                            # 転売価格でも価格が拾えているならログに残す
                             print(f"-> {item['name']}: Amazon以外の販売元 ({price}円)")
                     else:
                         print(f"-> {item['name']}: 在庫なし（価格取得不可）")
