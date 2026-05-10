@@ -71,36 +71,35 @@ def check_task():
         while True:
             for item in target_items:
                 try:
-                    # 公式販売者ID(AN1VRQENFRJN5)を固定し、マーケットプレイス品を排除
+                    # 公式販売者ID(AN1VRQENFRJN5)を固定、キャッシュ回避
                     page.goto(f"{item['url']}?smid=AN1VRQENFRJN5&_t={int(time.time())}", wait_until="domcontentloaded", timeout=60000)
                     time.sleep(3)
 
                     content = page.content()
                     
-                    # ブロック時は位置再設定
                     if "CAPTCHA" in page.title() or len(content) < 10000:
                         print(f"-> {item['name']}: Blocked. Retrying location...")
                         set_location_to_japan(page)
                         continue
 
-                    # 公式販売判定（Amazon.co.jpが販売/発送する在庫のみを許可）
+                    # 1. 公式販売判定
                     is_official = any(x in content for x in ["Amazon.co.jpが販売", "発送元 Amazon.co.jp"])
+                    # 2. カートボタン判定
                     has_cart = "add-to-cart-button" in content or "buy-now-button" in content
 
-                    # 価格抽出
+                    # 3. 価格抽出
                     price = None
                     price_matches = re.findall(r'￥\s?([0-9,]{3,})', content)
                     if price_matches:
                         price = int(re.sub(r'\D', '', price_matches[0]))
 
-                    # 【重要】公式かつカートボタンがある場合のみ通知
-                    if has_cart and is_official:
-                        p_str = f"{price}円" if price else "価格不明"
-                        print(f"★ {item['name']}: 公式在庫あり ({p_str})")
-                        # 通知内容も公式限定であることを明記
-                        send_discord_notify(f"**【Amazon公式サイト在庫復活】**\n{item['name']}\n価格: `{p_str}`\n{item['url']}?smid=AN1VRQENFRJN5")
+                    # 全ての条件（公式・カートあり・価格取得成功）を満たす場合のみ通知
+                    if has_cart and is_official and price is not None:
+                        print(f"★ {item['name']}: 公式在庫あり ({price}円)")
+                        send_discord_notify(f"**【Amazon公式サイト在庫復活】**\n{item['name']}\n価格: `{price}円`\n{item['url']}?smid=AN1VRQENFRJN5")
                     else:
-                        print(f"-> {item['name']}: 公式在庫なし (Marketplace ignored)")
+                        reason = "OOS" if not has_cart else ("Marketplace" if not is_official else "Price Unknown")
+                        print(f"-> {item['name']}: 対象外 ({reason} / Price: {price})")
 
                 except Exception as e:
                     print(f"-> {item['name']}: Error - {str(e)[:30]}")
@@ -108,7 +107,7 @@ def check_task():
                 time.sleep(2)
             
             print(f"--- Cycle Finished {time.strftime('%H:%M:%S')} ---")
-            time.sleep(15) # ループ待機時間15秒
+            time.sleep(15)
 
 @app.route("/")
 def health():
