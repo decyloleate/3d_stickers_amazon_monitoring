@@ -2,34 +2,26 @@ import time
 import os
 import requests
 import threading
-import re
 from playwright.sync_api import sync_playwright
 from flask import Flask
 
 app = Flask(__name__)
 
-# --- 設定項目 ---
-target_items = [
-    {"name": "ロレッタ", "url": "https://amzn.asia/d/04Hjs6ii"},
-]
-
-price_limit = 99999999999
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
-def send_discord_notify(message):
-    if not discord_webhook_url:
-        print("【警告】Webhook URLが設定されていません。")
-        return
+def send_debug_info(message, image_path=None):
+    """Discordにテキストと画像を送信する"""
+    if not discord_webhook_url: return
     try:
-        response = requests.post(discord_webhook_url, json={"content": message}, timeout=10)
-        if response.status_code == 204:
-            print("Discord通知を送信しました。")
+        if image_path and os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                requests.post(discord_webhook_url, data={"content": message}, files={"file": f})
         else:
-            print(f"Discord送信失敗: {response.status_code}")
+            requests.post(discord_webhook_url, json={"content": message})
     except Exception as e:
         print(f"Discord送信エラー: {e}")
 
-def check_amazon_task():
+def debug_amazon():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context = browser.new_context(
@@ -38,66 +30,45 @@ def check_amazon_task():
         )
         page = context.new_page()
         
-        # 動作を軽くするため画像・メディア・フォントをブロック
-        page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "media", "font"] else route.continue_())
+        # ※今回は画面を撮影するため、画像のブロック設定は外しています
 
-        print("監視プロセス開始")
-        while True:
-            for item in target_items:
-                try:
-                    page.goto(item['url'], wait_until="domcontentloaded", timeout=40000)
-                    page.wait_for_timeout(5000)
-
-                    # 1. 厳密な価格エリアの特定（画面右側のメイン価格だけを狙う）
-                    price = None
-                    # 上から順に、現在表示されている価格エリアを探す
-                    price_selectors = [
-                        "#corePriceDisplay_desktop_feature_div .a-price-whole", # 現在のAmazonの主流（PS5など）
-                        "#sns-base-price .a-price-whole",                      # 定期おトク便の価格（ロレッタなど）
-                        "#corePrice_feature_div .a-price-whole",               # 少し前のレイアウト
-                        "#desktop_buybox .a-price-whole"                       # 予備
-                    ]
-                    
-                    for sel in price_selectors:
-                        el = page.locator(sel).first
-                        if el.is_visible():
-                            raw_text = el.inner_text()
-                            digits = re.sub(r'\D', '', raw_text) # 数字以外を徹底的に排除
-                            if digits:
-                                price = int(digits)
-                                break # 正しい価格が見つかったら探索終了
-
-                    # 2. 販売元の特定（カートボックス内のテキストで判定）
-                    is_official = False
-                    buybox = page.locator("#desktop_buybox, #rightCol").first
-                    if buybox.is_visible():
-                        bb_text = buybox.inner_text()
-                        is_official = any(x in bb_text for x in ["Amazon.co.jp", "Amazonによる発送", "Amazon.co.jpが販売"])
-
-                    # 3. 判定と通知
-                    if price and is_official and price <= price_limit:
-                        print(f"{item['name']}: 在庫あり判定 ({price}円)")
-                        msg = f"**【Amazon在庫あり】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
-                        send_discord_notify(msg)
-                    elif price:
-                        status = "Amazon以外（公式在庫なし）" if not is_official else "価格条件外"
-                        print(f"-> {item['name']}: {status} ({price}円)")
-                    else:
-                        print(f"-> {item['name']}: 在庫なし（価格情報が見当たりません）")
-
-                except Exception as e:
-                    print(f"-> {item['name']}: エラー - {type(e).__name__}")
-                
-                time.sleep(5)
+        print("デバッグ調査開始: ロレッタのページを開きます")
+        try:
+            page.goto("https://amzn.asia/d/04Hjs6ii", wait_until="domcontentloaded", timeout=40000)
+            page.wait_for_timeout(5000) # ページが完全に描画されるのを待つ
             
-            print("1サイクル完了。20秒待機...")
-            time.sleep(20)
+            # 1. 証拠写真を撮影
+            screenshot_path = "debug_screenshot.png"
+            page.screenshot(path=screenshot_path)
+            
+            # 2. 右側のカート・価格エリアの生のHTMLテキストを抽出
+            buybox_text = "取得不可（要素が見つかりません）"
+            # 定期おトク便や通常購入の枠を広めに取得
+            buybox = page.locator("#desktop_buybox, #rightCol, #buyBoxAccordion").first
+            if buybox.is_visible():
+                buybox_text = buybox.inner_text()
+                
+            # Renderのログに出力
+            print("\n================ 取得した生テキスト ================")
+            print(buybox_text)
+            print("====================================================\n")
+            
+            # Discordに画像を送信
+            send_debug_info("**【デバッグ調査】** 現在、プログラムにはこのように見えています。Renderのログに生テキストを出力しました。", screenshot_path)
+            print("Discordに画面キャプチャを送信しました。")
+
+        except Exception as e:
+            print(f"デバッグ中にエラー発生: {e}")
+        
+        # 調査用なので1回実行したら待機させる
+        while True:
+            time.sleep(60)
 
 @app.route("/")
 def health_check():
-    return "Running"
+    return "Debug Mode Running"
 
 if __name__ == "__main__":
-    threading.Thread(target=check_amazon_task, daemon=True).start()
+    threading.Thread(target=debug_amazon, daemon=True).start()
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
