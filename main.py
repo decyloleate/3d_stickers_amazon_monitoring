@@ -48,7 +48,10 @@ def check_amazon_task():
     with sync_playwright() as p:
         # メモリ制限対策の引数を指定してブラウザを起動
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0")
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            locale="ja-JP"
+        )
         page = context.new_page()
         
         # 高速化: 画像、CSS、フォントの読み込みを強制ブロック
@@ -80,6 +83,10 @@ def check_amazon_task():
 
                 except Exception as e:
                     print(f"-> {item['name']}: エラー詳細: {type(e).__name__} - {e}")
+                    try:
+                        print(f"   [デバッグ] 現在のページタイトル: {page.title()}")
+                    except:
+                        pass    
                 
                 time.sleep(2)
             
