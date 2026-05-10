@@ -38,7 +38,7 @@ def check_amazon_task():
         )
         page = context.new_page()
         
-        # 画像・メディアをブロック（CSSはレイアウト維持のため読み込む）
+        # 画像・メディアのみブロック
         page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "media", "font"] else route.continue_())
 
         print("監視プロセス開始")
@@ -46,41 +46,48 @@ def check_amazon_task():
             for item in target_items:
                 try:
                     page.goto(item['url'], wait_until="domcontentloaded", timeout=40000)
-                    page.wait_for_timeout(5000) # レンダリング待ち
+                    page.wait_for_timeout(5000)
 
+                    # 1. カートボックスまたは価格エリアの特定
                     buybox = None
-                    for selector in ["#buybox", "#lp_buybox", "#desktop_buybox", "#combinedBuyBox", "#corePrice_feature_div"]:
+                    for selector in ["#buybox", "#lp_buybox", "#desktop_buybox", "#corePrice_feature_div", "#price_inside_buybox"]:
                         if page.locator(selector).is_visible():
                             buybox = page.locator(selector)
                             break
                     
                     if buybox:
                         full_text = buybox.inner_text()
-                        # 公式販売チェック（柔軟に判定）
                         is_official = any(x in full_text for x in ["Amazon.co.jp", "Amazonによる発送", "Amazon.co.jpが販売"])
                         
-                        # 価格抽出（正規表現で数字だけを抜き出す）
+                        # 2. 価格抽出の強化
                         price = None
-                        price_selectors = [".a-price-whole", ".a-offscreen", "#priceblock_ourprice", "span.a-color-price"]
+                        # まずは一般的な価格クラスから探す
+                        price_selectors = [".a-price-whole", ".a-offscreen", "span[data-a-color='price']", ".a-color-price"]
                         for p_sel in price_selectors:
-                            el = page.locator(p_sel).first
+                            el = buybox.locator(p_sel).first
                             if el.count() > 0:
-                                raw_price_text = el.inner_text()
-                                digits = re.sub(r'\D', '', raw_price_text) # 数字以外をすべて削除
+                                digits = re.sub(r'\D', '', el.inner_text())
                                 if digits:
                                     price = int(digits)
                                     break
+                        
+                        # それでも取れない場合、buybox全体のテキストから「￥数字」のパターンを探す
+                        if not price:
+                            # ￥または¥の後の数字を抽出（例：￥66,980 -> 66980）
+                            match = re.search(r'[￥¥]\s?([\d,]+)', full_text)
+                            if match:
+                                price = int(re.sub(r'\D', '', match.group(1)))
 
+                        # 3. 判定と通知
                         if price and is_official and price <= price_limit:
-                            print(f"{item['name']}: 在庫あり判定！({price}円)")
+                            print(f"{item['name']}: 在庫あり判定 ({price}円)")
                             msg = f"**【Amazon在庫あり】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
                             send_discord_notify(msg)
                         elif price:
                             status = "Amazon以外" if not is_official else "価格条件外"
                             print(f"-> {item['name']}: {status} ({price}円)")
                         else:
-                            # 価格が取れないがボタンはある場合、テスト通知を送ってみる（任意）
-                            print(f"-> {item['name']}: ボタンはありますが価格が不明です。")
+                            print(f"-> {item['name']}: ボタンはありますが価格が特定できません。")
                     else:
                         print(f"-> {item['name']}: 在庫なし")
 
