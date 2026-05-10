@@ -29,11 +29,11 @@ target_items = [
     # {"name": "ちいかわポーズ", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-Sun-Star-Stationery-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-S8542961/dp/B0FN42SFNB?ref_=ast_sto_dp"},
     # {"name": "くちぱっち", "url": "https://www.amazon.co.jp/%E3%82%B5%E3%83%B3%E3%82%B9%E3%82%BF%E3%83%BC%E6%96%87%E5%85%B7-%E3%81%9F%E3%81%BE%E3%81%94%E3%81%A3%E3%81%A1-%E3%83%9C%E3%83%B3%E3%83%9C%E3%83%B3%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%B7%E3%83%BC%E3%83%AB-%E3%81%8F%E3%81%A1%E3%81%B1%E3%81%A3%E3%81%A1-S8812560/dp/B0F4CZTGD9?ref_=ast_sto_dp"},
     # {"name": "Nintendo Switch 2", "url": "https://amzn.asia/d/02LmnGzL"},
-    # {"name": "", "url": ""},
+     {"name": "PlayStation 5", "url": "https://amzn.asia/d/08SGeDlu"},
     # {"name": "", "url": ""},
 ]
 
-price_limit = 700
+price_limit = 99999999999
 # セキュリティのため環境変数から取得するように変更
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
