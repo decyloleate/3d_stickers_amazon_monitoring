@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 # --- 設定項目 ---
 target_items = [
-    {"name": "PlayStation 5", "url": "https://amzn.asia/d/08SGeDlu"},
+    {"name": "ロレッタ", "url": "https://amzn.asia/d/0hZjNvJ3"},
 ]
 
 price_limit = 99999999999
