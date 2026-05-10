@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 # --- 設定項目 ---
 target_items = [
-    {"name": "ロレッタ", "url": "https://amzn.asia/d/0hZjNvJ3"},
+    {"name": "ロレッタ", "url": "https://amzn.asia/d/04Hjs6ii"},
 ]
 
 price_limit = 99999999999
@@ -38,7 +38,7 @@ def check_amazon_task():
         )
         page = context.new_page()
         
-        # 画像類をブロックして高速化
+        # 動作を軽くするため画像・メディア・フォントをブロック
         page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "media", "font"] else route.continue_())
 
         print("監視プロセス開始")
@@ -48,21 +48,28 @@ def check_amazon_task():
                     page.goto(item['url'], wait_until="domcontentloaded", timeout=40000)
                     page.wait_for_timeout(5000)
 
-                    # 1. 価格エリアの特定（より厳密なセレクタに変更）
-                    # .a-price-whole は「￥66,000」の「66,000」部分だけを指すクラスです
-                    price_element = page.locator(".a-container .a-price-whole").first
-                    
+                    # 1. 厳密な価格エリアの特定（画面右側のメイン価格だけを狙う）
                     price = None
-                    if price_element.is_visible():
-                        raw_text = price_element.inner_text()
-                        # 数字以外を削除し、最初に見つかった数値の塊だけを取得
-                        digits = re.sub(r'\D', '', raw_text)
-                        if digits:
-                            price = int(digits)
+                    # 上から順に、現在表示されている価格エリアを探す
+                    price_selectors = [
+                        "#corePriceDisplay_desktop_feature_div .a-price-whole", # 現在のAmazonの主流（PS5など）
+                        "#sns-base-price .a-price-whole",                      # 定期おトク便の価格（ロレッタなど）
+                        "#corePrice_feature_div .a-price-whole",               # 少し前のレイアウト
+                        "#desktop_buybox .a-price-whole"                       # 予備
+                    ]
+                    
+                    for sel in price_selectors:
+                        el = page.locator(sel).first
+                        if el.is_visible():
+                            raw_text = el.inner_text()
+                            digits = re.sub(r'\D', '', raw_text) # 数字以外を徹底的に排除
+                            if digits:
+                                price = int(digits)
+                                break # 正しい価格が見つかったら探索終了
 
                     # 2. 販売元の特定（カートボックス内のテキストで判定）
-                    buybox = page.locator("#buybox, #desktop_buybox").first
                     is_official = False
+                    buybox = page.locator("#desktop_buybox, #rightCol").first
                     if buybox.is_visible():
                         bb_text = buybox.inner_text()
                         is_official = any(x in bb_text for x in ["Amazon.co.jp", "Amazonによる発送", "Amazon.co.jpが販売"])
@@ -76,7 +83,7 @@ def check_amazon_task():
                         status = "Amazon以外（公式在庫なし）" if not is_official else "価格条件外"
                         print(f"-> {item['name']}: {status} ({price}円)")
                     else:
-                        print(f"-> {item['name']}: 在庫なし（価格が読み取れません）")
+                        print(f"-> {item['name']}: 在庫なし（価格情報が見当たりません）")
 
                 except Exception as e:
                     print(f"-> {item['name']}: エラー - {type(e).__name__}")
