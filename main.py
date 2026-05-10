@@ -10,8 +10,8 @@ app = Flask(__name__)
 
 # --- 設定項目 ---
 target_items = [
-    {"name": "ロレッタ", "url": "https://www.amazon.co.jp/dp/B004WBF8EG?smid=AN1VRQENFRJN5"},
-    {"name": "PlayStation 5", "url": "https://www.amazon.co.jp/dp/B08SGeDlu?smid=AN1VRQENFRJN5"},
+    {"name": "ロレッタ", "asin": "B004WBF8EG"},
+    {"name": "PlayStation 5", "asin": "B08SGeDlu"},
 ]
 
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
@@ -24,75 +24,65 @@ def send_discord_notify(message):
 
 def check_amazon_task():
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--window-size=1920,1080"
-            ]
-        )
-        
-        # 【最重要】Googlebot(スマホ版)に偽装し、日本のIPヘッダーを付与
+        # ステルス性を維持しつつPC版として動作
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-            locale="ja-JP",
-            timezone_id="Asia/Tokyo",
-            extra_http_headers={
-                "Accept-Language": "ja-JP,ja;q=0.9",
-                "X-Forwarded-For": "133.232.0.0" # 日本のIP帯域をアピール
-            }
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            locale="ja-JP"
         )
-        
         page = context.new_page()
 
-        print("監視プロセス開始（Googlebot偽装＆ステータス直読みモード）")
+        print("監視プロセス開始（AOD裏ページ解析モデル）")
         while True:
             for item in target_items:
                 try:
-                    response = page.goto(item['url'], wait_until="domcontentloaded", timeout=60000)
-                    page.wait_for_timeout(5000)
+                    # 【重要】商品詳細ページではなく「すべての出品」ページを直接開く
+                    # このURLは「お届け先」による価格隠蔽がされにくい特殊なページです
+                    aod_url = f"https://www.amazon.co.jp/gp/product/ajax/ref=dp_aod_ALL_mbc?asin={item['asin']}&experienceId=aodAjaxMain"
+                    
+                    page.goto(aod_url, wait_until="domcontentloaded", timeout=60000)
+                    page.wait_for_timeout(3000)
 
-                    if "CAPTCHA" in page.title() or "ご迷惑をおかけして" in page.title():
-                        print(f"-> {item['name']}: [ブロック検知] CAPTCHAやエラー画面")
+                    content = page.content()
+                    
+                    # 1. ページが正常に開けているか確認
+                    if "CAPTCHA" in page.title() or len(content) < 500:
+                        print(f"-> {item['name']}: [ブロック] ページを正常に読み込めませんでした")
                         continue
 
-                    # 【解析1】Amazonが画面に表示している「在庫状況テキスト」を直接抜き出す
-                    availability_text = "ステータス表記なし"
-                    avail_locator = page.locator("#availability, #outOfStock, .qa-availability-message").first
-                    if avail_locator.is_visible():
-                        # 改行を消して1行のテキストにする
-                        availability_text = re.sub(r'\s+', ' ', avail_locator.inner_text().strip())
-
-                    # 【解析2】価格とカートの取得
+                    # 2. 「Amazon.co.jpが販売」というブロックを探す
+                    # AODページ内では各販売者が独立した div で構成されています
                     price = None
-                    content = page.content()
-
-                    # Googlebot向けに簡略化されたHTMLから価格を探す
-                    price_match = re.search(r'"priceAmount":\s*(\d+)', content) or re.search(r'data-asin-price="(\d+\.?\d*)"', content)
-                    if price_match:
-                        price = int(float(price_match.group(1)))
-                    else:
-                        for sel in [".a-price-whole", "#priceblock_ourprice", ".apexPriceToPay"]:
-                            el = page.locator(sel).first
-                            if el.is_visible():
-                                digits = re.sub(r'\D', '', el.inner_text())
+                    
+                    # AODページ特有の価格セレクタ（.a-price .a-offscreen）をスキャン
+                    # Amazon.co.jpが販売している行の価格を特定する
+                    offers = page.locator("#aod-offer").all()
+                    for offer in offers:
+                        offer_text = offer.inner_text()
+                        if "Amazon.co.jp" in offer_text:
+                            # このブロック内に価格があるか確認
+                            price_el = offer.locator(".a-price .a-offscreen").first
+                            if price_el.is_visible():
+                                raw_price = price_el.inner_text()
+                                digits = re.sub(r'\D', '', raw_price)
                                 if digits:
                                     price = int(digits)
                                     break
+                    
+                    # バックアップ：もし上記で見つからない場合、ページ全体の最初の価格を拾う
+                    if not price:
+                        price_match = re.search(r'￥\s?([0-9,]+)', content)
+                        if price_match:
+                            price = int(re.sub(r'\D', '', price_match.group(1)))
 
-                    has_cart = page.locator("#add-to-cart-button, #buy-now-button, #submit\\.add-to-cart").is_visible()
-                    is_official = any(k in content for k in ["Amazon.co.jpが販売", "発送元 Amazon.co.jp", "Amazon.co.jp directly"])
-
-                    # --- 最終判定 ---
-                    if price and price > 100 and (is_official or has_cart):
-                        print(f"{item['name']}: [成功] 在庫あり ({price}円) - 状態: [{availability_text}]")
-                        send_discord_notify(f"**【Amazon在庫復活】**\n{item['name']}\n価格: `{price}円`\n{item['url']}")
-                    elif has_cart:
-                        print(f"{item['name']}: [部分成功] カートあり(価格不明) - 状態: [{availability_text}]")
+                    # 3. 判定
+                    # AODページで「Amazon.co.jp」という文字があり、価格が取れれば在庫あり
+                    if price and price > 100 and "Amazon.co.jp" in content:
+                        print(f"{item['name']}: [成功] 公式在庫あり ({price}円)")
+                        item_url = f"https://www.amazon.co.jp/dp/{item['asin']}"
+                        send_discord_notify(f"**【Amazon在庫復活】**\n{item['name']}\n価格: `{price}円` (AOD解析)\n{item_url}")
                     else:
-                        # 失敗した場合でも、Amazonが何と言って拒否しているかをログに出す
-                        print(f"-> {item['name']}: 画面判定 [{availability_text}] (取得価格: {price}円)")
+                        print(f"-> {item['name']}: 在庫なし（AODページに公式販売なし）")
 
                 except Exception as e:
                     print(f"-> {item['name']}: エラー - {type(e).__name__}")
@@ -104,7 +94,7 @@ def check_amazon_task():
 
 @app.route("/")
 def health_check():
-    return "Monitoring"
+    return "Running"
 
 if __name__ == "__main__":
     threading.Thread(target=check_amazon_task, daemon=True).start()
