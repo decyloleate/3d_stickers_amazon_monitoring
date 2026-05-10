@@ -34,7 +34,6 @@ target_items = [
 ]
 
 price_limit = 99999999999
-# セキュリティのため環境変数から取得するように変更
 discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 def send_discord_notify(message):
@@ -46,61 +45,68 @@ def send_discord_notify(message):
 
 def check_amazon_task():
     with sync_playwright() as p:
-        # メモリ制限対策の引数を指定してブラウザを起動
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             locale="ja-JP"
         )
         page = context.new_page()
         
-        # 高速化: 画像、CSS、フォントの読み込みを強制ブロック
-        page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "media", "font", "stylesheet"] else route.continue_())
+        # 高速化しつつ安定させる（CSSは読み込ませる。画像・フォントのみブロック）
+        # ※CSSをブロックするとAmazonのレイアウトが崩れ、Playwrightが要素を見失うため
+        page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "media", "font"] else route.continue_())
 
         print("監視プロセス開始")
         while True:
             for item in target_items:
                 try:
-                    page.goto(item['url'], timeout=30000)
-                    buybox = page.locator("#buybox")
-                    buybox.wait_for(state="attached", timeout=10000)
+                    # ページ遷移と少しの待機（レンダリング待ち）
+                    page.goto(item['url'], wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(3000) # 3秒待機して要素の出現を確実にする
+
+                    # 購入ボックスの判定（複数の候補を探す）
+                    buybox = None
+                    for selector in ["#buybox", "#lp_buybox", "#desktop_buybox"]:
+                        if page.locator(selector).is_visible():
+                            buybox = page.locator(selector)
+                            break
                     
-                    text_content = buybox.inner_text()
-                    is_official = "Amazon.co.jp" in text_content
-                    
-                    price_element = buybox.locator(".a-price-whole").first
-                    if price_element.count() > 0:
-                        price = int(price_element.inner_text().replace(",", "").strip())
+                    if buybox:
+                        text_content = buybox.inner_text()
+                        # 販売元がAmazon.co.jpかチェック
+                        is_official = "Amazon.co.jp" in text_content
                         
-                        if is_official and price <= price_limit:
-                            print(f"{item['name']}: 公式在庫あり {price}円")
-                            msg = f"**【Amazon公式 在庫確認】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
-                            send_discord_notify(msg)
+                        price_element = buybox.locator(".a-price-whole").first
+                        if price_element.count() > 0:
+                            price_val = price_element.inner_text().replace(",", "").strip()
+                            price = int(price_val)
+                            
+                            if is_official and price <= price_limit:
+                                print(f"{item['name']}: 公式在庫あり {price}円")
+                                msg = f"**【Amazon公式 在庫確認】**\n**商品名**: {item['name']}\n**価格**: `{price}円`\n**URL**: {item['url']}"
+                                send_discord_notify(msg)
+                            else:
+                                reason = "Amazon以外" if not is_official else "価格条件外"
+                                print(f"-> {item['name']}: {reason} ({price}円)")
                         else:
-                            print(f"-> {item['name']}: マケプレ ({price}円) または条件外")
+                            print(f"-> {item['name']}: 在庫なし/価格取得不可")
                     else:
-                        print(f"-> {item['name']}: 在庫なし/価格取得不可")
+                        # カートボックス自体が見当たらない場合
+                        print(f"-> {item['name']}: 在庫なし（購入ボタン未検出）")
 
                 except Exception as e:
-                    print(f"-> {item['name']}: エラー詳細: {type(e).__name__} - {e}")
-                    try:
-                        print(f"   [デバッグ] 現在のページタイトル: {page.title()}")
-                    except:
-                        pass    
+                    print(f"-> {item['name']}: エラー発生 - {type(e).__name__}")
                 
-                time.sleep(2)
+                time.sleep(3) # 商品ごとのアクセス間隔
             
             print("1サイクル完了。20秒待機...")
             time.sleep(20)
-# Renderのポートバインディング対策（死活監視用エンドポイント）
+
 @app.route("/")
 def health_check():
     return "Amazon Bot is running ok."
 
 if __name__ == "__main__":
-    # 監視タスクをバックグラウンドで開始
     threading.Thread(target=check_amazon_task, daemon=True).start()
-    
-    # Flaskサーバー起動
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
